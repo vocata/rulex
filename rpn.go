@@ -45,56 +45,42 @@ func RPN(expr string, fn ValidateOperandFunc) ([]string, error) {
 	exprUTF8 := []rune(removeSpace(expr)) // compatible with utf-8
 	exprUTF8 = append(exprUTF8, 0)        // sentinel 0
 
-	opStk := NewStack()
-	opStk.Push(rune(0))
+	opStk := NewStack(rune(0))
 	var exprRPN []string
-	var begin int
+	var begin, end int
 	for !opStk.Empty() {
-		end := getNext(exprUTF8, begin)
+		end = getNext(exprUTF8, begin)
 
 		seg := exprUTF8[begin:end]
 		if len(seg) == 1 && getIndex(seg[0]) != -1 {
-			op := seg[0]
-			switch orderBetween(opStk.Top().(rune), op) {
+			operator := seg[0]
+
+			switch orderBetween(opStk.Top().(rune), operator) {
 			case '<':
-				opStk.Push(op)
+				opStk.Push(operator)
 				begin = end
 			case '>':
-				op := opStk.Pop().(rune)
-				exprRPN = append(exprRPN, string(op))
+				operator := opStk.Pop().(rune)
+				exprRPN = append(exprRPN, string(operator))
 			case '=':
 				opStk.Pop()
 				begin = end
 			default:
-				return nil, fmt.Errorf("%w, no matching operand '%c', expr: %s", ErrInvalidSyntax, op, expr)
+				return nil, fmt.Errorf("%w, no matching operator '%c', expr: %s", ErrInvalidSyntax, operator, expr)
 			}
 		} else {
-			condName := string(seg)
-			if fn != nil && !fn(condName) {
-				return nil, fmt.Errorf("%w, no condition name '%s', expr: %s", ErrCondNotMatch, condName, expr)
+			operand := string(seg)
+
+			if fn != nil && !fn(operand) {
+				return nil, fmt.Errorf("%w, no condition name '%s', expr: %s", ErrCondNotMatch, operand, expr)
 			}
-			exprRPN = append(exprRPN, condName)
+
+			exprRPN = append(exprRPN, operand)
 			begin = end
 		}
 	}
-	if !validate(exprRPN) {
-		return nil, fmt.Errorf("%w, mismatch between the number of operators and operands, expr: %s", ErrInvalidSyntax, expr)
-	}
 
 	return exprRPN, nil
-}
-
-func validate(rpn []string) bool {
-	var left int
-	for _, item := range rpn {
-		if item == "!" {
-		} else if item == "&" || item == "|" {
-			left--
-		} else {
-			left++
-		}
-	}
-	return left == 1
 }
 
 func removeSpace(s string) string {

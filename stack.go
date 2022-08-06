@@ -8,9 +8,13 @@ type Stack struct {
 	ll *list.List
 }
 
-func NewStack() *Stack {
+func NewStack(items ...interface{}) *Stack {
+	ll := list.New()
+	for _, v := range items {
+		ll.PushBack(v)
+	}
 	return &Stack{
-		ll: list.New(),
+		ll: ll,
 	}
 }
 

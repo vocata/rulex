@@ -1,32 +1,44 @@
 package rulex
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
 
-var ExprCase = [][2]string{
-	{"a|b", "a b |"},
-	{"a|b&c", "a b | c &"},
-	{"a|b&(c)", "a b | c &"},
-	{"a|b&(c|d)", "a b | c d | &"},
-	{"a|b&!(c|d)", "a b | c d | ! &"},
-	{"a|!b&!(c|d)", "a b ! | c d | ! &"},
-	{"a|!!!!!b&!(c|d)", "a b ! ! ! ! ! | c d | ! &"},
-	{"你|我&!(他|她)", "你 我 | 他 她 | ! &"}, // support utf-8
-	{"a|(b&(c&!(d|e))&(f|g)|(h&!i))&!(j|!k)", "a b c d e | ! & & f g | & h i ! & | | j k ! | ! &"},
+var ExprCase = []struct {
+	Expr string
+	RPN  string
+	Err  error
+}{
+	{"a|b", "a b |", nil},
+	{"a|b&c", "a b | c &", nil},
+	{"a|b&(c)", "a b | c &", nil},
+	{"a|b&(c|d)", "a b | c d | &", nil},
+	{"a|b&!(c|d)", "a b | c d | ! &", nil},
+	{"a|!b&!(c|d)", "a b ! | c d | ! &", nil},
+	{"a|!!!!!b&!(c|d)", "a b ! ! ! ! ! | c d | ! &", nil},
+	{"你|我&!(他|她)", "你 我 | 他 她 | ! &", nil}, // support utf-8
+	{"a|(b&(c&!(d|e))&(f|g)|(h&!i))&!(j|!k)", "a b c d e | ! & & f g | & h i ! & | | j k ! | ! &", nil},
+	{"a|b|", "", ErrInvalidSyntax},
+	{"a|b!c", "", ErrInvalidSyntax},
+	{"|a&b!c", "", ErrInvalidSyntax},
+	{"", "", ErrInvalidSyntax},
+	{"a", "", ErrInvalidSyntax},
 }
 
 func TestRPN(t *testing.T) {
 	for i, c := range ExprCase {
-		rpn, err := RPN(c[0], nil)
-		if err != nil {
-			t.Fatal(err)
+		rpn, err := RPN(c.Expr, nil)
+		t.Logf("rpn %d - error: %v", i, err)
+		if !errors.Is(err, c.Err) {
+			t.Fatalf("rpn %d - test failed, error occurs, actual: %v, expected: %v", i, errors.Unwrap(err), c.Err)
 		}
-		actual, expected := strings.Join(rpn, " "), c[1]
+
+		actual, expected := strings.Join(rpn, " "), c.RPN
 		t.Logf("rpn %d - result: %s", i, actual)
 		if actual != expected {
-			t.Fatalf("test failed, actual: %s, expected: %s", actual, expected)
+			t.Fatalf("rpn %d - test failed, actual: %s, expected: %s", i, actual, expected)
 		}
 	}
 }
