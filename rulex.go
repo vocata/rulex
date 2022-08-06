@@ -90,7 +90,7 @@ func NewRuleX(expr string, cond Condition) (*RuleX, error) {
 	}, nil
 }
 
-func (r RuleX) Eval(actual map[string]interface{}) (bool, error) {
+func (r RuleX) Eval(inputs map[string]interface{}) (bool, error) {
 	stk := NewStack()
 
 	for begin, end := 0, len(r.rpn); begin != end; begin++ {
@@ -100,9 +100,9 @@ func (r RuleX) Eval(actual map[string]interface{}) (bool, error) {
 		} else if isBinary(item) {
 			calcBinary(item, stk)
 		} else {
-			act, ok := actual[item]
+			act, ok := inputs[item]
 			if !ok {
-				return false, fmt.Errorf("%w, missing condition '%s'", ErrCondNotMatch, item)
+				return false, fmt.Errorf("%w, missing '%s' in actual inputs", ErrCondNotMatch, item)
 			}
 			stk.Push(r.cond[item].Calc(act))
 		}

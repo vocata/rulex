@@ -32,7 +32,7 @@ func TestPredefinedAction(t *testing.T) {
 	}
 }
 
-func TestRuleX(t *testing.T) {
+func TestSelfDefinedAction(t *testing.T) {
 	cond := NewCondition()
 	cond.Add("a", ActionFunc(func(actual interface{}) bool {
 		return strings.HasPrefix(actual.(string), "http://")

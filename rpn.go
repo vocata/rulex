@@ -2,39 +2,35 @@ package rulex
 
 import (
 	"fmt"
-	"strings"
 	"unicode"
 )
 
-var priorityTable = [6][6]rune{
+var priorityTable = [6][6]byte{
 	//        &    |    !	 (    )    0
 	/* & */ {'>', '>', '<', '<', '>', '>'},
 	/* | */ {'>', '>', '<', '<', '>', '>'},
 	/* ! */ {'>', '>', '<', '<', '>', '>'},
-	/* ( */ {'<', '<', '<', '<', '=', ' '},
+	/* ( */ {'<', '<', '<', '<', '=', ')'},
 	/* ) */ {' ', ' ', ' ', ' ', ' ', ' '},
-	/* 0 */ {'<', '<', '<', '<', ' ', '='},
+	/* 0 */ {'<', '<', '<', '<', '(', '='},
 }
 
 func getIndex(op rune) int {
-	var idx int
 	switch op {
 	case '&':
-		idx = 0
+		return 0
 	case '|':
-		idx = 1
+		return 1
 	case '!':
-		idx = 2
+		return 2
 	case '(':
-		idx = 3
+		return 3
 	case ')':
-		idx = 4
+		return 4
 	case 0:
-		idx = 5
-	default:
-		idx = -1
+		return 5
 	}
-	return idx
+	return -1
 }
 
 // ValidateOperandFunc is type of func to validate the name of operand
@@ -42,73 +38,104 @@ type ValidateOperandFunc func(string) bool
 
 // RPN converts infix expression to Reverse Polish Notation expression
 func RPN(expr string, fn ValidateOperandFunc) ([]string, error) {
-	exprUTF8 := []rune(removeSpace(expr)) // compatible with utf-8
-	exprUTF8 = append(exprUTF8, 0)        // sentinel 0
+	// compatible with utf-8
+	exprUTF8 := []rune(expr)
 
-	opStk := NewStack(rune(0))
+	// sentinel 0
+	exprUTF8 = append(exprUTF8, 0)
+	operatorStack := NewStack(rune(0))
+
 	var exprRPN []string
-	var begin, end int
-	for !opStk.Empty() {
-		end = getNext(exprUTF8, begin)
+	var begin, end, count int
+	for !operatorStack.Empty() {
+		if begin, end = getNext(exprUTF8, begin); begin == end {
+			break
+		}
 
-		seg := exprUTF8[begin:end]
-		if len(seg) == 1 && getIndex(seg[0]) != -1 {
-			operator := seg[0]
+		item := exprUTF8[begin:end]
+		if len(item) == 1 && getIndex(item[0]) != -1 {
+			operator := item[0]
 
-			switch orderBetween(opStk.Top().(rune), operator) {
+			switch order := orderBetween(operatorStack.Top().(rune), operator); order {
 			case '<':
-				opStk.Push(operator)
+				operatorStack.Push(operator)
 				begin = end
 			case '>':
-				operator := opStk.Pop().(rune)
+				operator := operatorStack.Pop().(rune)
+				if unary(operator) {
+					if count < 1 {
+						return nil, fmt.Errorf("%w, '%c' requires one operand, expr: '%s'", ErrInvalidSyntax, operator, expr)
+					}
+				}
+				if binary(operator) {
+					if count < 2 {
+						return nil, fmt.Errorf("%w, '%c' requires tow operand, expr: '%s'", ErrInvalidSyntax, operator, expr)
+					}
+					count--
+				}
 				exprRPN = append(exprRPN, string(operator))
 			case '=':
-				opStk.Pop()
+				operatorStack.Pop()
 				begin = end
 			default:
-				return nil, fmt.Errorf("%w, no matching operator '%c', expr: %s", ErrInvalidSyntax, operator, expr)
+				return nil, fmt.Errorf("%w, missing '%c', expr: '%s'", ErrInvalidSyntax, order, expr)
 			}
 		} else {
-			operand := string(seg)
+			operand := string(item)
 
 			if fn != nil && !fn(operand) {
-				return nil, fmt.Errorf("%w, no condition name '%s', expr: %s", ErrCondNotMatch, operand, expr)
+				return nil, fmt.Errorf("%w, missing '%s' in conditions, expr: '%s'", ErrCondNotMatch, operand, expr)
 			}
 
 			exprRPN = append(exprRPN, operand)
 			begin = end
+			count++
 		}
+	}
+	if count == 0 {
+		return nil, fmt.Errorf("%w, empty expr", ErrInvalidSyntax)
+	}
+	if count > 1 {
+		return nil, fmt.Errorf("%w, too many operand", ErrInvalidSyntax)
 	}
 
 	return exprRPN, nil
 }
 
-func removeSpace(s string) string {
-	var builder strings.Builder
-	for _, ch := range s {
-		if unicode.IsSpace(ch) {
-			continue
-		}
-		builder.WriteRune(ch)
-	}
-	return builder.String()
-}
-
-func orderBetween(left, right rune) rune {
+func orderBetween(left, right rune) byte {
 	top_idx := getIndex(left)
 	cur_idx := getIndex(right)
 
 	return priorityTable[top_idx][cur_idx]
 }
 
-func getNext(expr []rune, idx int) int {
-	for i, ch := range expr[idx:] {
-		if getIndex(ch) != -1 {
+func unary(op rune) bool {
+	return op == '!'
+}
+
+func binary(op rune) bool {
+	return op == '&' || op == '|'
+}
+
+func getNext(expr []rune, begin int) (int, int) {
+	// trim left space
+	for begin < len(expr) {
+		if !unicode.IsSpace(expr[begin]) {
+			break
+		}
+		begin++
+	}
+
+	for i, r := range expr[begin:] {
+		if unicode.IsSpace(r) {
+			return begin, begin + i
+		}
+		if getIndex(r) != -1 {
 			if i == 0 {
-				return idx + i + 1
+				return begin, begin + 1
 			}
-			return idx + i
+			return begin, begin + i
 		}
 	}
-	return len(expr)
+	return begin, len(expr)
 }
