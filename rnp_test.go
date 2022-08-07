@@ -49,6 +49,12 @@ var ExprCase = []struct {
 	{"!", "", ErrInvalidSyntax},
 	{"(! )a", "", ErrInvalidSyntax},
 	{"a(! )a", "", ErrInvalidSyntax},
+	{"()", "", ErrInvalidSyntax},
+	{"(a)", "a", nil},
+	{"a)", "", ErrInvalidSyntax},
+	{"a!", "", ErrInvalidSyntax},
+	{"!(a)", "a !", nil},
+	{"(a|b)!", "", ErrInvalidSyntax},
 }
 
 func TestRPN(t *testing.T) {
