@@ -59,7 +59,7 @@ var ExprCase = []struct {
 
 func TestRPN(t *testing.T) {
 	for i, c := range ExprCase {
-		rpn, err := RPN(c.Expr, nil)
+		rpn, err := RPN(c.Expr)
 		t.Logf("rpn %d - error: %v", i, err)
 		if !errors.Is(err, c.Err) {
 			t.Fatalf("rpn %d - test failed, error occurs, actual: %v, expected: %v", i, errors.Unwrap(err), c.Err)

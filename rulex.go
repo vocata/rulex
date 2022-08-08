@@ -76,9 +76,11 @@ type RuleX struct {
 }
 
 func NewRuleX(expr string, cond Condition) (*RuleX, error) {
-	rpn, err := RPN(expr, func(operand string) bool {
-		_, ok := cond[operand]
-		return ok
+	rpn, err := RPN(expr, func(operand string) error {
+		if _, ok := cond[operand]; !ok {
+			return fmt.Errorf("missing '%s' in condition", operand)
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err

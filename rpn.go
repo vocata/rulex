@@ -5,6 +5,7 @@ import (
 	"unicode"
 )
 
+// priorityTable specifies the order between operators
 var priorityTable = [6][6]byte{
 	//        0    &    |    !    (    )
 	/* 0 */ {'=', '<', '<', '<', '<', ' '},
@@ -15,7 +16,8 @@ var priorityTable = [6][6]byte{
 	/* ) */ {' ', ' ', ' ', ' ', ' ', ' '},
 }
 
-var positionTable = [7][7]byte{
+// constraintTable specifies the sequence of each element that appears in expression
+var constraintTable = [7][7]byte{
 	//       0  &  |  !  (  )  o
 	/* 0 */ {0, 0, 0, 1, 1, 0, 1},
 	/* & */ {0, 0, 0, 1, 1, 0, 1},
@@ -26,8 +28,8 @@ var positionTable = [7][7]byte{
 	/* o */ {1, 1, 1, 0, 0, 1, 0},
 }
 
-// getpriorityTableIndex returns index of operator in priority table
-func getpriorityTableIndex(op rune) int {
+// getPriorityTableIndex returns index of operator in priority table
+func getPriorityTableIndex(op rune) int {
 	switch op {
 	case 0:
 		return 0
@@ -46,13 +48,13 @@ func getpriorityTableIndex(op rune) int {
 }
 
 func orderBetween(left, right rune) byte {
-	top_idx := getpriorityTableIndex(left)
-	cur_idx := getpriorityTableIndex(right)
+	leftIdx := getPriorityTableIndex(left)
+	rightIdx := getPriorityTableIndex(right)
 
-	return priorityTable[top_idx][cur_idx]
+	return priorityTable[leftIdx][rightIdx]
 }
 
-func getPositionTableIndex(item rune) int {
+func getConstraintTableIndex(item rune) int {
 	switch item {
 	case 0:
 		return 0
@@ -70,18 +72,27 @@ func getPositionTableIndex(item rune) int {
 	return 6
 }
 
-func validPosition(former, latter rune) bool {
-	former_idx := getPositionTableIndex(former)
-	latter_idx := getPositionTableIndex(latter)
+func validConstraint(former, latter rune) bool {
+	formerIdx := getConstraintTableIndex(former)
+	latterIdx := getConstraintTableIndex(latter)
 
-	return positionTable[former_idx][latter_idx] == 1
+	return constraintTable[formerIdx][latterIdx] == 1
 }
 
-// ValidateOperandFunc is type of func to validate the name of operand
-type ValidateOperandFunc func(string) bool
+// ValidOperandFunc is type of func to validate the name of operand
+type ValidOperandFunc func(string) error
+
+func defaultValidOperandFunc(operand string) error {
+	for _, r := range operand {
+		if !unicode.IsPrint(r) {
+			return fmt.Errorf("non-printable characters '\\u%x' in operand '%s'", r, operand)
+		}
+	}
+	return nil
+}
 
 // RPN converts infix expression to Reverse Polish Notation expression
-func RPN(expr string, fn ValidateOperandFunc) ([]string, error) {
+func RPN(expr string, fns ...ValidOperandFunc) ([]string, error) {
 	// validate expression
 	exprUTF8, err := validate(expr)
 	if err != nil {
@@ -93,14 +104,14 @@ func RPN(expr string, fn ValidateOperandFunc) ([]string, error) {
 	operatorStack := NewStack(rune(0))
 
 	var exprRPN []string
-	var begin, end, count int
+	var begin, end int
 	for !operatorStack.Empty() {
 		if begin, end = getNext(exprUTF8, begin); begin == end {
 			break
 		}
 
 		item := exprUTF8[begin:end]
-		if len(item) == 1 && getpriorityTableIndex(item[0]) != -1 {
+		if len(item) == 1 && getPriorityTableIndex(item[0]) != -1 {
 			operator := item[0]
 
 			switch orderBetween(operatorStack.Top().(rune), operator) {
@@ -119,13 +130,15 @@ func RPN(expr string, fn ValidateOperandFunc) ([]string, error) {
 		} else {
 			operand := string(item)
 
-			if fn != nil && !fn(operand) {
-				return nil, fmt.Errorf("%w, missing '%s' in conditions, expr: '%s', idx: %d", ErrCondNotMatch, operand, expr, begin)
+			fns = append(fns, defaultValidOperandFunc)
+			for _, fn := range fns {
+				if err := fn(operand); err != nil {
+					return nil, fmt.Errorf("%w, %s, expr: '%s', idx: %d", ErrInvalidOperand, err.Error(), expr, begin)
+				}
 			}
 
 			exprRPN = append(exprRPN, operand)
 			begin = end
-			count++
 		}
 	}
 
@@ -138,7 +151,7 @@ func validate(expr string) ([]rune, error) {
 	if err := validateParentheses(expr, exprUTF8); err != nil {
 		return nil, err
 	}
-	if err := validatePosition(expr, exprUTF8); err != nil {
+	if err := validateConstraint(expr, exprUTF8); err != nil {
 		return nil, err
 	}
 	return exprUTF8, nil
@@ -164,13 +177,15 @@ func validateParentheses(expr string, exprUTF8 []rune) error {
 	return nil
 }
 
-func validatePosition(expr string, exprUTF8 []rune) error {
+func validateConstraint(expr string, exprUTF8 []rune) error {
 	exprUTF8 = append(exprUTF8, 0) // sentinel 0
-	var former, latter = []rune{0}, []rune{}
 	var last int
+	var latter []rune
+	former := []rune{0}
 	for begin, end := getNext(exprUTF8, 0); begin != end; begin, end = getNext(exprUTF8, end) {
 		latter = exprUTF8[begin:end]
-		if !validPosition(former[0], latter[0]) {
+		// for simplicity, do not detail error reason
+		if !validConstraint(former[0], latter[0]) {
 			if former[0] == 0 && latter[0] == 0 {
 				return fmt.Errorf("%w, empty expr", ErrInvalidSyntax)
 			} else if former[0] != 0 {
@@ -198,7 +213,7 @@ func getNext(expr []rune, begin int) (int, int) {
 		if unicode.IsSpace(r) {
 			return begin, begin + i
 		}
-		if getpriorityTableIndex(r) != -1 {
+		if getPriorityTableIndex(r) != -1 {
 			if i == 0 {
 				return begin, begin + 1
 			}
