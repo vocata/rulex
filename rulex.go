@@ -21,46 +21,38 @@ func (f ActionFunc) Calc(actual interface{}) bool {
 	return f(actual)
 }
 
-type Condition map[string]Action
+type Condition map[string]struct {
+	tag    string
+	action Action
+}
 
 func NewCondition() Condition {
 	return make(Condition)
 }
 
-func (c Condition) Add(name string, op Action) Condition {
-	if op == nil {
+func (c Condition) Add(name string, tag string, action Action) Condition {
+	if action == nil {
 		return c
 	}
 	if _, ok := c[name]; !ok {
-		c[name] = op
+		c[name] = struct {
+			tag    string
+			action Action
+		}{tag: tag, action: action}
 	}
+
 	return c
 }
 
-func (c Condition) AddMore(m map[string]Action) Condition {
-	for name, op := range m {
-		if _, ok := c[name]; !ok && op != nil {
-			c[name] = op
-		}
-	}
-	return c
-}
-
-func (c Condition) Set(name string, op Action) Condition {
-	if op != nil {
+func (c Condition) Set(name string, tag string, action Action) Condition {
+	if action != nil {
 		return c
 	}
-	c[name] = op
-	return c
-}
+	c[name] = struct {
+		tag    string
+		action Action
+	}{tag: tag, action: action}
 
-func (c Condition) SetMore(m map[string]Action) Condition {
-	for name, op := range m {
-		if op == nil {
-			continue
-		}
-		c[name] = op
-	}
 	return c
 }
 
@@ -78,7 +70,7 @@ type RuleX struct {
 func NewRuleX(expr string, cond Condition) (*RuleX, error) {
 	rpn, err := RPN(expr, func(operand string) error {
 		if _, ok := cond[operand]; !ok {
-			return fmt.Errorf("missing '%s' in condition", operand)
+			return fmt.Errorf("missing operator '%s' in condition", operand)
 		}
 		return nil
 	})
@@ -102,11 +94,11 @@ func (r RuleX) Eval(inputs map[string]interface{}) (bool, error) {
 		} else if isBinary(item) {
 			calcBinary(item, stk)
 		} else {
-			act, ok := inputs[item]
+			actual, ok := inputs[r.cond[item].tag]
 			if !ok {
-				return false, fmt.Errorf("%w, missing '%s' in actual inputs", ErrCondNotMatch, item)
+				return false, fmt.Errorf("%w, missing tag '%s' in actual inputs", ErrTagNotFound, item)
 			}
-			stk.Push(r.cond[item].Calc(act))
+			stk.Push(r.cond[item].action.Calc(actual))
 		}
 	}
 	return stk.Pop().(bool), nil

@@ -7,17 +7,16 @@ import (
 
 func TestPredefinedAction(t *testing.T) {
 	cond := NewCondition()
-	cond.Add("a", GT(10))
-	cond.Add("b", LT(20))
-	cond.Add("c", In([]int{1, 2, 3}))
+	cond.Add("a", "height", GT(165))
+	cond.Add("b", "height", LT(180))
+	cond.Add("c", "gender", In([]string{"male", "female"}))
 
 	actual := map[string]interface{}{
-		"a": 15,
-		"b": 15,
-		"c": 5,
+		"height": 175,
+		"gender": "male",
 	}
 
-	ruleX, err := NewRuleX("a & b & !c", cond)
+	ruleX, err := NewRuleX("a & b & c", cond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,24 +33,23 @@ func TestPredefinedAction(t *testing.T) {
 
 func TestSelfDefinedAction(t *testing.T) {
 	cond := NewCondition()
-	cond.Add("a", ActionFunc(func(actual interface{}) bool {
+	cond.Add("a", "chromium", ActionFunc(func(actual interface{}) bool {
 		return strings.HasPrefix(actual.(string), "http://")
-	}))
-	cond.Add("b", ActionFunc(func(actual interface{}) bool {
+	})).Add("b", "chromium", ActionFunc(func(actual interface{}) bool {
 		return strings.HasPrefix(actual.(string), "https://")
-	}))
-	cond.Add("c", ActionFunc(func(actual interface{}) bool {
+	})).Add("c", "chromium", ActionFunc(func(actual interface{}) bool {
 		return strings.HasSuffix(actual.(string), ".git")
+	})).Add("d", "is_public", ActionFunc(func(actual interface{}) bool {
+		return actual.(bool)
 	}))
 	actual := map[string]interface{}{
-		"a": "https://github.com/chromium/chromium.git",
-		"b": "https://github.com/chromium/chromium.git",
-		"c": "https://github.com/chromium/chromium.git",
+		"chromium":  "https://github.com/chromium/chromium.git",
+		"is_public": true,
 	}
 
 	var expected bool
 	// expression 1
-	expr1 := "(a | b) & c"
+	expr1 := "(a | b) & c & d"
 	ruleX1, err := NewRuleX(expr1, cond)
 	if err != nil {
 		t.Fatal(err)
@@ -68,7 +66,7 @@ func TestSelfDefinedAction(t *testing.T) {
 	}
 
 	// expression 2
-	expr2 := "(a | b) & !!c"
+	expr2 := "(a | b) & !!c & !!d"
 	ruleX2, err := NewRuleX(expr2, cond)
 	if err != nil {
 		t.Fatal(err)
@@ -85,7 +83,7 @@ func TestSelfDefinedAction(t *testing.T) {
 	}
 
 	// expression 3
-	expr3 := "!!(a | b) & !!c"
+	expr3 := "!!(a | b) & !!c & d"
 	ruleX3, err := NewRuleX(expr3, cond)
 	if err != nil {
 		t.Fatal(err)
@@ -102,7 +100,7 @@ func TestSelfDefinedAction(t *testing.T) {
 	}
 
 	// expression 4
-	expr4 := "!(!a & !b) & !!c"
+	expr4 := "!(!a & !b) & !!c & d"
 	ruleX4, err := NewRuleX(expr4, cond)
 	if err != nil {
 		t.Fatal(err)
@@ -119,7 +117,7 @@ func TestSelfDefinedAction(t *testing.T) {
 	}
 
 	// expression 5
-	expr5 := "a & b & c"
+	expr5 := "a & b & c & d"
 	ruleX5, err := NewRuleX(expr5, cond)
 	if err != nil {
 		t.Fatal(err)
@@ -136,7 +134,7 @@ func TestSelfDefinedAction(t *testing.T) {
 	}
 
 	// expression 6
-	expr6 := "!a & b & c"
+	expr6 := "!a & b & c & !!d"
 	ruleX6, err := NewRuleX(expr6, cond)
 	if err != nil {
 		t.Fatal(err)
